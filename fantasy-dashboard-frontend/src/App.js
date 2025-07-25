@@ -9,7 +9,7 @@ const PlayerDetailsModal = ({ player, onClose }) => {
   // Function to render stats for a given category (e.g., 'passing', 'receiving', 'rushing')
   const renderStatsCategory = (categoryName, stats) => {
     if (!stats || Object.keys(stats).length === 0) {
-      return <p>No {categoryName} stats available.</p>;
+      return <p className="text-gray-300">No {categoryName} stats available.</p>;
     }
     return (
       <div className="stats-category">
@@ -69,10 +69,9 @@ const PlayerDetailsModal = ({ player, onClose }) => {
           {activeTab === 'sentiment' && (
             <div className="sentiment-section">
               <h3 className="text-2xl font-bold text-blue-300 mb-4">Player Sentiment</h3>
-              <p className="text-gray-300">Sentiment analysis will be integrated here later!</p>
-              {/* Placeholder for sentiment data */}
+              {/* Display the sentiment received from the backend */}
               {player.sentiment && player.sentiment !== "N/A (Sentiment integration pending)" ? (
-                <p className="text-gray-300">Current Sentiment: {player.sentiment}</p>
+                <p className="text-gray-300">Current Sentiment: <span className="font-semibold text-blue-200">{player.sentiment}</span></p>
               ) : (
                 <p className="text-gray-300">Sentiment data is not yet available.</p>
               )}
@@ -106,6 +105,38 @@ function App() {
   // State to hold the player whose details are shown in the modal
   const [playerForModal, setPlayerForModal] = useState(null);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [playersPerPage] = useState(15); // Number of players to display per page
+  const [pageInput, setPageInput] = useState(''); // State for the page number input field
+
+  // Calculate players for the current page
+  const indexOfLastPlayer = currentPage * playersPerPage;
+  const indexOfFirstPlayer = indexOfLastPlayer - playersPerPage;
+  const currentPlayers = players.slice(indexOfFirstPlayer, indexOfLastPlayer);
+
+  // Calculate total pages
+  const totalPages = Math.ceil(players.length / playersPerPage);
+
+  // Function to change page
+  const paginate = (pageNumber) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+      setCurrentPage(pageNumber);
+      setPageInput(''); // Clear the input after navigating
+    }
+  };
+
+  // Handle direct page input
+  const handleGoToPage = () => {
+    const pageNum = parseInt(pageInput, 10);
+    if (isNaN(pageNum) || pageNum < 1 || pageNum > totalPages) {
+      setSearchError(`Please enter a valid page number between 1 and ${totalPages}.`);
+      setPageInput(''); // Clear invalid input
+    } else {
+      paginate(pageNum);
+      setSearchError(null); // Clear any previous errors
+    }
+  };
 
   // useEffect hook to fetch initial player list from the Flask backend when the component mounts
   useEffect(() => {
@@ -145,7 +176,7 @@ function App() {
     );
 
     if (!foundPlayer) {
-      setSearchError(`Player "${searchTerm}" not found in the initial list. Please try a full name.`);
+      setSearchError(`Player "${searchTerm}" not found in the list. Please try a full name.`);
       setSearchLoading(false);
       return;
     }
@@ -168,31 +199,24 @@ function App() {
 
   // Function to open the modal with player details
   const openPlayerModal = async (playerToDisplay) => {
-    // If the player is from the initial list, we need to fetch its detailed stats
-    // from the backend via the /api/player/<player_id> endpoint.
-    // The 'searchedPlayer' already has 'detailed_stats' populated, so we can use it directly.
     let playerDetails = playerToDisplay;
 
-    // Check if detailed_stats is missing or empty, then fetch.
-    // This handles cases where the initial list might not have full stats,
-    // but the individual player endpoint does.
-    if (!playerToDisplay.detailed_stats || Object.keys(playerToDisplay.detailed_stats).length === 0) {
-      try {
-        setSearchLoading(true); // Use searchLoading to indicate fetching for modal
-        const response = await fetch(`http://127.0.0.1:5000/api/player/${encodeURIComponent(playerToDisplay.id)}`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-        playerDetails = await response.json();
-      } catch (err) {
-        console.error("Failed to fetch detailed stats for modal:", err);
-        setSearchError("Failed to load detailed stats for player.");
-        setSearchLoading(false);
-        return;
-      } finally {
-        setSearchLoading(false);
+    // Always fetch detailed data for the modal to ensure we have the latest stats and sentiment
+    try {
+      setSearchLoading(true); // Use searchLoading to indicate fetching for modal
+      const response = await fetch(`http://127.0.0.1:5000/api/player/${encodeURIComponent(playerToDisplay.id)}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
+      playerDetails = await response.json();
+    } catch (err) {
+      console.error("Failed to fetch detailed stats and sentiment for modal:", err);
+      setSearchError("Failed to load detailed player data for modal.");
+      setSearchLoading(false);
+      return;
+    } finally {
+      setSearchLoading(false);
     }
 
     setPlayerForModal(playerDetails);
@@ -506,6 +530,74 @@ function App() {
         .stats-category:last-child {
             margin-bottom: 0;
         }
+
+        /* Pagination Styles */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 0.5rem;
+        }
+
+        .pagination-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem; /* rounded-md */
+            background-color: #4a5568; /* bg-gray-700 */
+            color: #ffffff;
+            border: 1px solid #4a5568;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+            font-weight: 500;
+        }
+
+        .pagination-button:hover:not(:disabled) {
+            background-color: #63b3ed; /* bg-blue-500 */
+            border-color: #63b3ed;
+        }
+
+        .pagination-button:disabled {
+            background-color: #2d3748; /* bg-gray-800 */
+            color: #a0aec0; /* text-gray-400 */
+            cursor: not-allowed;
+        }
+
+        .pagination-button.active {
+            background-color: #63b3ed; /* bg-blue-500 */
+            border-color: #63b3ed;
+            font-weight: 700;
+        }
+
+        .page-input {
+            width: 4rem; /* Smaller width for page number input */
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            border: 1px solid #4a5568;
+            background-color: #2d3748;
+            color: #ffffff;
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        .go-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            background-color: #48bb78; /* Green */
+            color: #ffffff;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        .go-button:hover:not(:disabled) {
+            background-color: #38a169; /* Darker green */
+        }
+
+        .go-button:disabled {
+            background-color: #6b7280; /* Gray */
+            cursor: not-allowed;
+        }
         `}
       </style>
 
@@ -583,18 +675,59 @@ function App() {
           )}
 
           {!loading && !error && players.length > 0 && (
-            <div className="player-grid">
-              {/* Map through the players array and render each player */}
-              {players.map((player) => (
-                <div key={player.id} className="player-card" onClick={() => openPlayerModal(player)}>
-                  <h3>{player.name}</h3>
-                  <p><span>Team:</span> {player.team}</p>
-                  <p><span>Position:</span> {player.position}</p>
-                  {/* Stats and Sentiment removed from direct display */}
-                  <p className="text-sm text-gray-400 mt-2">Click for more details!</p>
-                </div>
-              ))}
-            </div>
+            <>
+              <div className="player-grid">
+                {/* Map through the players array for the current page and render each player */}
+                {currentPlayers.map((player) => (
+                  <div key={player.id} className="player-card" onClick={() => openPlayerModal(player)}>
+                    <h3>{player.name}</h3>
+                    <p><span>Team:</span> {player.team}</p>
+                    <p><span>Position:</span> {player.position}</p>
+                    {/* Stats and Sentiment removed from direct display */}
+                    <p className="text-sm text-gray-400 mt-2">Click for more details!</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Enhanced Pagination Controls */}
+              <div className="pagination">
+                <button
+                  onClick={() => paginate(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="pagination-button"
+                >
+                  Previous
+                </button>
+                
+                <span className="text-gray-300 mx-2">Page {currentPage} of {totalPages}</span>
+
+                <input
+                    type="number"
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onKeyPress={(e) => { if (e.key === 'Enter') handleGoToPage(); }}
+                    className="page-input"
+                    min="1"
+                    max={totalPages}
+                    placeholder="#"
+                />
+                <button
+                    onClick={handleGoToPage}
+                    disabled={!pageInput || isNaN(parseInt(pageInput, 10)) || parseInt(pageInput, 10) < 1 || parseInt(pageInput, 10) > totalPages}
+                    className="go-button"
+                >
+                    Go
+                </button>
+
+                <button
+                  onClick={() => paginate(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="pagination-button"
+                >
+                  Next
+                </button>
+              </div>
+            </>
           )}
         </section>
 
