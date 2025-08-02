@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 // PlayerDetailsModal Component
 const PlayerDetailsModal = ({ player, onClose }) => {
-  const [activeTab, setActiveTab] = useState('stats'); // 'stats' or 'sentiment'
+  const [activeTab, setActiveTab] = useState('stats'); // 'stats'
 
   if (!player) return null;
 

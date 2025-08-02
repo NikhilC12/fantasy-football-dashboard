@@ -1,9 +1,50 @@
+# app.py (updated)
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import requests # Import the requests library
+import requests
+from sentiment_analyzer import get_sentiment_label
+import random # For generating random sentiment in the placeholder
 
 app = Flask(__name__)
 CORS(app)
+
+# Dummy function to simulate fetching tweets or news articles
+# For a real application, you would connect to a social media API like Twitter, Reddit, etc.
+def fetch_social_media_data(player_name):
+    """
+    This is a placeholder function. In a real app, you would
+    fetch real-time data from social media platforms.
+    """
+    # Simulate a list of recent headlines/tweets for a few players
+    sample_data = {
+        'Christian McCaffrey': [
+            "Christian McCaffrey is having an incredible season!",
+            "McCaffrey has been a game-changer for the team.",
+            "His performance last week was disappointing."
+        ],
+        'Patrick Mahomes': [
+            "Mahomes is the best quarterback in the league, period.",
+            "Another MVP-caliber season for Mahomes.",
+            "Mahomes struggled with turnovers in the last game."
+        ],
+        'Travis Kelce': [
+            "Travis Kelce is a fantasy football cheat code.",
+            "Great catch by Kelce to win the game!",
+            "Kelce had a quiet day with limited targets."
+        ],
+        # If the player is not in our sample, provide a generic message
+        'default': [
+            f"{player_name} is a key part of the offense.",
+            f"{player_name} has been inconsistent this season.",
+            f"The team is hoping for a bounce-back game from {player_name}."
+        ]
+    }
+    
+    player_data = sample_data.get(player_name, sample_data['default'])
+    
+    # Select a random sample to simulate recent chatter
+    return random.sample(player_data, 1)[0] # Return a single random item from the list
 
 @app.route('/')
 def home():
@@ -11,53 +52,30 @@ def home():
 
 @app.route('/api/players', methods=['GET'])
 def get_players():
-    """
-    Fetches NFL player data (name, team, position) from the Fantasy Football Data Pros API,
-    and returns it with placeholders for stats and sentiment.
-    This version fetches ALL available players from the API for the specified season.
-    """
-    # Using 2019 season for testing, as it's an example year in their documentation
-    # This helps verify if the API is functional and returning data for known years.
+    # ... (Keep this function as is. It returns a placeholder for sentiment) ...
     current_season_year = 2019 
     ffdp_players_url = f"https://www.fantasyfootballdatapros.com/api/players/{current_season_year}/all"
     players_data = []
 
     try:
-        # Make a GET request to the Fantasy Football Data Pros API
-        print(f"Attempting to fetch ALL players from: {ffdp_players_url}")
         response = requests.get(ffdp_players_url)
-        response.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
+        response.raise_for_status() 
         all_ffdp_players = response.json()
 
-        print(f"Received {len(all_ffdp_players)} player entries from FFDP API for {current_season_year} season.")
-        
-        # --- DEBUGGING: Print a portion of the raw response to inspect structure ---
-        if all_ffdp_players:
-            print("--- First 5 player entries from FFDP API (raw JSON): ---")
-            for i, entry in enumerate(all_ffdp_players[:5]):
-                print(f"  Entry {i}: {entry}")
-            print("-------------------------------------------------------")
-        else:
-            print(f"FFDP API returned an empty list for {current_season_year} season.")
-        # --- END DEBUGGING ---
-
-        # Process ALL players (removed the players_processed_count limit)
         for player_info in all_ffdp_players:
-            # The FFDP API provides 'player_name', 'team', 'position' directly.
-            # We'll use 'player_name' as the 'id' for the frontend, as it's what the user searches by.
             player_name = player_info.get('player_name', 'N/A')
             team = player_info.get('team', 'N/A')
             position = player_info.get('position', 'N/A')
 
-            # Ensure essential data is present before adding the player
             if player_name != 'N/A' and team != 'N/A' and position != 'N/A':
                 players_data.append({
-                    "id": player_name, # Using player_name as the ID for frontend consistency with search
+                    "id": player_name,
                     "name": player_name,
                     "team": team,
                     "position": position,
-                    "stats": "N/A (Stats not required for this view)", # Simplified as per your request
-                    "sentiment": "N/A (Sentiment integration pending)" # Placeholder for future sentiment
+                    "stats": "N/A (Stats not required for this view)",
+                    # Still a placeholder here, as we only need sentiment on the detail view
+                    "sentiment": "N/A (Sentiment data pending)"
                 })
         
         print(f"Successfully processed {len(players_data)} players from FFDP for {current_season_year} season.")
@@ -73,50 +91,42 @@ def get_players():
 @app.route('/api/player/<player_id>', methods=['GET'])
 def get_player_details(player_id):
     """
-    Fetches details for a specific player by their name (which is used as ID)
-    from the Fantasy Football Data Pros API.
-    Since FFDP doesn't have a direct single-player endpoint by ID, we fetch all
-    players for the season and then find the matching one by name.
+    Fetches details for a specific player and now includes a sentiment score.
     """
-    current_season_year = 2019 # Using 2019 for consistency with get_players for testing
+    current_season_year = 2019
     ffdp_players_url = f"https://www.fantasyfootballdatapros.com/api/players/{current_season_year}/all"
     
     try:
-        # Fetch all players from FFDP API
-        print(f"Attempting to fetch all players to find details for ID (name): {player_id}")
         response = requests.get(ffdp_players_url)
         response.raise_for_status()
         all_ffdp_players = response.json()
 
         player_info = None
-        # The player_id passed here is actually the player's name (e.g., "Christian McCaffrey")
         for p_info in all_ffdp_players:
-            # Compare the player's name from the API with the player_id (which is the search term/name)
-            if p_info.get('player_name', '').lower() == player_id.lower(): 
+            if p_info.get('player_name', '').lower() == player_id.lower():
                 player_info = p_info
                 break
 
         if player_info:
-            player_name = player_info.get('player_name', 'N/A')
-            team = player_info.get('team', 'N/A')
-            position = player_info.get('position', 'N/A')
+            # --- New Logic for Sentiment Analysis ---
+            # 1. Fetch some simulated social media data for the player.
+            social_data = fetch_social_media_data(player_info.get('player_name', 'N/A'))
             
-            # Extract the raw 'stats' dictionary directly from player_info
-            # This will contain 'passing', 'receiving', and 'rushing' keys
-            detailed_stats = player_info.get('stats', {}) # Default to empty dict if no stats
+            # 2. Analyze the sentiment of that data using your new module.
+            sentiment_result = get_sentiment_label(social_data)
+            print(f"Analyzed sentiment for {player_info.get('player_name', '')}: {sentiment_result}")
+            # --- End New Logic ---
 
             player_details = {
-                "id": player_name, # Consistent with how it's stored in get_players
-                "name": player_name,
-                "team": team,
-                "position": position,
-                "detailed_stats": detailed_stats, # Now contains the actual stats dictionary
-                "sentiment": "N/A (Sentiment integration pending)" # Placeholder for sentiment
+                "id": player_info.get('player_name', 'N/A'),
+                "name": player_info.get('player_name', 'N/A'),
+                "team": player_info.get('team', 'N/A'),
+                "position": player_info.get('position', 'N/A'),
+                "detailed_stats": player_info.get('stats', {}),
+                "sentiment": sentiment_result # Now returns the actual sentiment label
             }
-            print(f"Found details for player ID (name) {player_id}: {player_details['name']}")
             return jsonify(player_details)
         else:
-            print(f"Player with ID (name) {player_id} not found in FFDP data for {current_season_year} season.")
             return jsonify({"error": "Player not found."}), 404
 
     except requests.exceptions.RequestException as e:
